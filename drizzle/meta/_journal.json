@@ -8,6 +8,13 @@
       "when": 1777486684591,
       "tag": "0000_brown_epoch",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777499943082,
+      "tag": "0001_high_thundra",
+      "breakpoints": true
     }
   ]
 }

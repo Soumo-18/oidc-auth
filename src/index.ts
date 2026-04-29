@@ -9,6 +9,10 @@ import { usersTable } from "./db/schema";
 import { PRIVATE_KEY, PUBLIC_KEY } from "./utils/cert";
 import type { JWTClaims } from "./utils/user-token";
 
+import {  applicationsTable, authorizationCodesTable } from "./db/schema";
+import { error } from "node:console";
+import { PrimaryKey } from "drizzle-orm/gel-core";
+
 const app = express()
 
 const PORT = process.env.PORT ?? 8000;
@@ -21,6 +25,40 @@ app.get("/", (req, res) => res.json({ message: "Hello from Auth Server" }));
 app.get("/health", (req, res) =>
   res.json({ message: "Server is healthy", healthy: true }),
 );
+
+//Admin Route Register a new application 
+app.post('/admin/register-app', async (req,res)=> {
+    const { name, url, redirectUri } = req.body 
+
+    if(!name || !redirectUri) {
+        return res
+        .status(400)
+        .json({ message: "App name and redirectUri are Required"})
+    }
+
+    const clientId = crypto.randomUUID()
+
+    const clientSecret = crypto.randomBytes(32).toString("hex")
+
+    await db.insert(applicationsTable).values({
+        id:clientId,
+        secret: clientSecret,
+        name, 
+        url,
+        redirectUri
+    })
+
+    res.json({
+        message:"Application Registered Successfully !",
+        client_id: clientId,
+        client_secret: clientSecret
+    })
+})
+
+
+
+
+
 
 // OIDC Endpoints
 app.get("/.well-known/openid-configuration", (req, res) => {
@@ -42,54 +80,184 @@ app.get("/o/authenticate", (req, res) => {
   return res.sendFile(path.resolve("public", "authenticate.html"));
 });
 
-app.post("/o/authenticate/sign-in", async (req, res) => {
-  const { email, password } = req.body;
+// app.post("/o/authenticate/sign-in", async (req, res) => {
+//   const { email, password } = req.body;
 
-  if (!email || !password) {
-    res.status(400).json({ message: "Email and password are required." });
-    return;
-  }
+//   if (!email || !password) {
+//     res.status(400).json({ message: "Email and password are required." });
+//     return;
+//   }
 
-  const [user] = await db
-    .select()
-    .from(usersTable)
-    .where(eq(usersTable.email, email))
-    .limit(1);
+//   const [user] = await db
+//     .select()
+//     .from(usersTable)
+//     .where(eq(usersTable.email, email))
+//     .limit(1);
 
-  if (!user || !user.password || !user.salt) {
-    res.status(401).json({ message: "Invalid email or password." });
-    return;
-  }
+//   if (!user || !user.password || !user.salt) {
+//     res.status(401).json({ message: "Invalid email or password." });
+//     return;
+//   }
 
-  const hash = crypto
-    .createHash("sha256")
-    .update(password + user.salt)
-    .digest("hex");
+//   const hash = crypto
+//     .createHash("sha256")
+//     .update(password + user.salt)
+//     .digest("hex");
 
-  if (hash !== user.password) {
-    res.status(401).json({ message: "Invalid email or password." });
-    return;
-  }
+//   if (hash !== user.password) {
+//     res.status(401).json({ message: "Invalid email or password." });
+//     return;
+//   }
 
-  const ISSUER = `http://localhost:${PORT}`;
-  const now = Math.floor(Date.now() / 1000);
+//   const ISSUER = `http://localhost:${PORT}`;
+//   const now = Math.floor(Date.now() / 1000);
 
-  const claims: JWTClaims = {
-    iss: ISSUER,
-    sub: user.id,
-    email: user.email,
+//   const claims: JWTClaims = {
+//     iss: ISSUER,
+//     sub: user.id,
+//     email: user.email,
+//     email_verified: String(user.emailVerified),
+//     exp: now + 3600,
+//     given_name: user.firstName ?? "",
+//     family_name: user.lastName ?? undefined,
+//     name: [user.firstName, user.lastName].filter(Boolean).join(" "),
+//     picture: user.profileImageURL ?? undefined,
+//   };
+
+//   const token = JWT.sign(claims, PRIVATE_KEY, { algorithm: "RS256" });
+
+//   res.json({ token });
+// });
+
+app.post('/o/authenticate/sign-in', async(req,res) => {
+    const { email, password, client_id, redirect_uri, state} = req.body
+
+    if(!email || !password) {
+        return res.status(400).
+        json({ message:"Email and Password are Required"})
+    }
+
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.email, email)).limit(1)
+
+    if(!user || !user.password || !user.salt) {
+        return res.status(401).json({
+            message:" Invalid Email or Password"
+        })
+    }
+
+    const hash = crypto.createHash("sha256").update( password + user.salt ).digest("hex")
+
+    if( hash !== user.password) {
+        return res.status(401).json({
+            message:" Invalid Email or Password"
+        })
+    }
+
+//Oauth 2.0 -> If Client_id is present the only issue the code
+
+if(client_id && redirect_uri){
+    const code  = crypto.randomBytes(16).toString("hex")
+
+    //store the code in Database for 1min expiry
+    await db.insert(authorizationCodesTable).values({
+        code,
+        clientId: client_id,
+        userId: user.id,
+        expiresAt: new Date( Date.now() + 60000 )
+    })
+
+    //redirect URL to the developer's app
+    const redirectUrl = new URL(redirect_uri)
+    redirectUrl.searchParams.set("code",code)
+
+    if(state){
+        redirectUrl.searchParams.set("state",state)
+    }
+
+    return res.json({ redirect : redirectUrl.toString() })
+
+}
+
+//direct login flow if no client_id
+
+const ISSUER = `http://localhost:${PORT}`
+const now = Math.floor( Date.now() / 1000 )
+
+const claims: JWTClaims = {
+    iss:ISSUER,
+    sub:user.id,
+    email:user.email,
     email_verified: String(user.emailVerified),
     exp: now + 3600,
-    given_name: user.firstName ?? "",
-    family_name: user.lastName ?? undefined,
-    name: [user.firstName, user.lastName].filter(Boolean).join(" "),
-    picture: user.profileImageURL ?? undefined,
-  };
+    given_name:user.firstName ?? "",
+    family_name:user.lastName ?? undefined,
+    name:[user.firstName, user.lastName].filter(Boolean).join(' '),
+    picture:user.profileImageURL ?? undefined
+}
 
-  const token = JWT.sign(claims, PRIVATE_KEY, { algorithm: "RS256" });
+const token = JWT.sign(claims, PRIVATE_KEY, { algorithm: "RS256"})
+res.json({ token })
 
-  res.json({ token });
-});
+})
+
+//token exchange endpoint
+app.post('/o/token', async(req,res) => {
+    const { grant_type, code, client_id, client_secret}= req.body
+
+    //validation the applications credentials
+    const [app] = await db.select().from(applicationsTable).where(eq(applicationsTable.id, client_id)).limit(1)
+
+    if(!app || app.secret !== client_secret){
+        return res.status(401).json({error:"Invalid_client"})
+    }
+    //validating the authorization code 
+    const [authCode] = await db.select().from(authorizationCodesTable).where(eq(authorizationCodesTable.code, code)).limit(1)
+
+    if(!authCode || authCode.clientId !== client_id) { 
+        return res.status(400).json({
+            error:"invalid_grant", message:"Invlaid Code"
+        })
+    }
+
+    if(new Date() > authCode.expiresAt ) {
+        return res.status(400).json({error:"invalid_grant", message:"Code Expired"})
+    }
+
+    //delete the code so it cannot be used again
+    await db.delete(authorizationCodesTable).where(eq(authorizationCodesTable.id, authCode.id))
+
+    //get the User and Issue Token
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, authCode.userId)).limit(1)
+
+    const ISSUER = `http://localhost:${PORT}`
+    const now = Math.floor( Date.now() / 1000 )
+
+    const claims: JWTClaims = {
+        iss:ISSUER,
+        sub:user.id,
+        email:user.email,
+        email_verified:String(user.emailVerified),
+        exp:now+3600,
+        given_name:user.firstName ?? "",
+        family_name: user.lastName ?? undefined,
+        name: [user.firstName, user.lastName].filter(Boolean).join(' '),
+        picture: user.profileImageURL ?? undefined
+
+    }
+
+    const id_token = JWT.sign(claims, PRIVATE_KEY, { algorithm: "RS256"})
+
+    //in OIDC we return an access_token for (APIs) and an id_token(user profile data)
+    res.json({
+        access_token:id_token,
+        id_token: id_token,
+        token_type:"Bearer",
+        expires_in:3600
+    })
+})
+
+
+
 
 app.post("/o/authenticate/sign-up", async (req, res) => {
   const { firstName, lastName, email, password } = req.body;

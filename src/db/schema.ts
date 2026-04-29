@@ -1,3 +1,4 @@
+import { notInArray } from "drizzle-orm";
 import {
   uuid,  pgTable,
   varchar,  text,
@@ -25,4 +26,33 @@ export const usersTable = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 
   updatedAt: timestamp("updated_at").$onUpdate(() => new Date())
+})
+
+
+// table to store registered applications(Client ID / Client Secret)
+
+export const applicationsTable = pgTable("applications", {
+    id:varchar('id',{ length: 50 }).primaryKey(),  //Client ID
+
+    secret: text("secret").notNull(),              // Client Secret
+
+    name: varchar('name', { length: 300}).notNull(),
+
+    url: text("url"),
+
+    redirectUri: text('redirect_uri').notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull()
+})
+
+//Table to store the 1 minute expiration Authorization codes
+export const authorizationCodesTable = pgTable("authorization_codes", {
+    id:uuid("id").primaryKey().defaultRandom(),
+
+    code: varchar("code", { length: 300}).notNull().unique(),
+
+    clientId:varchar("client_id", { length:50 }).notNull(),
+
+    userId: uuid("user_id").notNull(),
+
+    expiresAt: timestamp("expires_at").notNull()
 })
