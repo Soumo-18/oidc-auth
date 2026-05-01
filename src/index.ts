@@ -19,6 +19,7 @@ app.use(cors())
 const PORT = process.env.PORT ?? 8000;
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 // app.use(express.static(path.resolve("public")));
 app.use(express.static(path.join(process.cwd(), "public")));
 
@@ -63,16 +64,35 @@ app.post('/admin/register-app', async (req,res)=> {
 
 
 // OIDC Endpoints
+// app.get("/.well-known/openid-configuration", (req, res) => {
+//   // const ISSUER = `http://localhost:${PORT}`;
+//   const ISSUER = process.env.NODE_ENV === "production" 
+//   ? "https://auth.soumodipto.me" 
+//   : `http://localhost:${PORT}`;
+//   return res.json({
+//     issuer: ISSUER,
+//     authorization_endpoint: `${ISSUER}/o/authenticate`,
+//     userinfo_endpoint: `${ISSUER}/o/userinfo`,
+//     jwks_uri: `${ISSUER}/.well-known/jwks.json`,
+//   });
+// });
 app.get("/.well-known/openid-configuration", (req, res) => {
-  // const ISSUER = `http://localhost:${PORT}`;
   const ISSUER = process.env.NODE_ENV === "production" 
-  ? "https://auth.soumodipto.me" 
-  : `http://localhost:${PORT}`;
+    ? "https://auth.soumodipto.me" 
+    : `http://localhost:${PORT}`;
+
   return res.json({
     issuer: ISSUER,
     authorization_endpoint: `${ISSUER}/o/authenticate`,
+    token_endpoint: `${ISSUER}/o/token`,
     userinfo_endpoint: `${ISSUER}/o/userinfo`,
     jwks_uri: `${ISSUER}/.well-known/jwks.json`,
+    response_types_supported: ["code"],
+    subject_types_supported: ["public"],
+    id_token_signing_alg_values_supported: ["RS256"],
+    scopes_supported: ["openid", "email", "profile"],
+    token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic"],
+    claims_supported: ["sub", "email", "given_name", "family_name", "name", "picture"]
   });
 });
 
@@ -264,11 +284,12 @@ app.post('/o/token', async(req,res) => {
 
     //in OIDC we return an access_token for (APIs) and an id_token(user profile data)
     res.json({
-        access_token:id_token,
-        id_token: id_token,
-        token_type:"Bearer",
-        expires_in:3600
-    })
+    access_token: id_token,
+    id_token: id_token,
+    token_type: "Bearer",
+    expires_in: 3600,
+    scope: "openid email profile"
+});
 })
 
 
