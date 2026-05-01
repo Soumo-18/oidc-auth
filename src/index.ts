@@ -19,7 +19,8 @@ app.use(cors())
 const PORT = process.env.PORT ?? 8000;
 
 app.use(express.json());
-app.use(express.static(path.resolve("public")));
+// app.use(express.static(path.resolve("public")));
+app.use(express.static(path.join(process.cwd(), "public")));
 
 app.get("/", (req, res) => res.json({ message: "Hello from Auth Server" }));
 
@@ -63,7 +64,10 @@ app.post('/admin/register-app', async (req,res)=> {
 
 // OIDC Endpoints
 app.get("/.well-known/openid-configuration", (req, res) => {
-  const ISSUER = `http://localhost:${PORT}`;
+  // const ISSUER = `http://localhost:${PORT}`;
+  const ISSUER = process.env.NODE_ENV === "production" 
+  ? "https://auth.soumodipto.me" 
+  : `http://localhost:${PORT}`;
   return res.json({
     issuer: ISSUER,
     authorization_endpoint: `${ISSUER}/o/authenticate`,
@@ -77,9 +81,13 @@ app.get("/.well-known/jwks.json", async (_, res) => {
   return res.json({ keys: [key.toJSON()] });
 });
 
+// app.get("/o/authenticate", (req, res) => {
+//   return res.sendFile(path.resolve("public", "authenticate.html"));
+// });
 app.get("/o/authenticate", (req, res) => {
-  return res.sendFile(path.resolve("public", "authenticate.html"));
+  return res.sendFile(path.join(process.cwd(), "public", "authenticate.html"));
 });
+
 
 // app.post("/o/authenticate/sign-in", async (req, res) => {
 //   const { email, password } = req.body;
@@ -181,7 +189,10 @@ if(client_id && redirect_uri){
 
 //direct login flow if no client_id
 
-const ISSUER = `http://localhost:${PORT}`
+// const ISSUER = `http://localhost:${PORT}`
+const ISSUER = process.env.NODE_ENV === "production" 
+  ? "https://auth.soumodipto.me" 
+  : `http://localhost:${PORT}`;
 const now = Math.floor( Date.now() / 1000 )
 
 const claims: JWTClaims = {
@@ -230,7 +241,10 @@ app.post('/o/token', async(req,res) => {
     //get the User and Issue Token
     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, authCode.userId)).limit(1)
 
-    const ISSUER = `http://localhost:${PORT}`
+    // const ISSUER = `http://localhost:${PORT}`
+    const ISSUER = process.env.NODE_ENV === "production" 
+  ? "https://auth.soumodipto.me" 
+  : `http://localhost:${PORT}`;
     const now = Math.floor( Date.now() / 1000 )
 
     const claims: JWTClaims = {
@@ -344,6 +358,16 @@ app.get("/o/userinfo", async (req, res) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`AuthServer is running on PORT ${PORT}`);
-});
+// app.listen(PORT, () => {
+//   console.log(`AuthServer is running on PORT ${PORT}`);
+// });
+// Only run the long-running server locally!
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 8000;
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+// Export the app for Vercel Serverless to consume
+export default app;
