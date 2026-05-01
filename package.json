@@ -5,9 +5,10 @@
   "main": "index.js",
   "scripts": {
     "db:migrate": "drizzle-kit migrate",
-    "db:generate": "drizzle-kit generate",
-    "db:studio": "drizzle-kit studio",
-    "dev": "tsx watch src/index.ts"
+  "db:generate": "drizzle-kit generate",
+  "db:push": "drizzle-kit push",
+  "dev": "tsx watch src/index.ts",
+  "build": "drizzle-kit push"
   },
   "keywords": [],
   "author": "",
