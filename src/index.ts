@@ -1,3 +1,4 @@
+import cors from "cors";
 import crypto from "node:crypto";
 import express from "express";
 import path from "node:path";
@@ -12,9 +13,9 @@ import type { JWTClaims } from "./utils/user-token";
 import {  applicationsTable, authorizationCodesTable } from "./db/schema";
 import { error } from "node:console";
 import { PrimaryKey } from "drizzle-orm/gel-core";
-
+import 'dotenv/config'
 const app = express()
-
+app.use(cors())
 const PORT = process.env.PORT ?? 8000;
 
 app.use(express.json());
