@@ -1,5 +1,5 @@
-import cors from "cors";
 import crypto from "node:crypto";
+import cors from "cors";
 import express from "express";
 import path from "node:path";
 import { eq } from "drizzle-orm";
@@ -30,35 +30,72 @@ app.get("/health", (req, res) =>
 );
 
 //Admin Route Register a new application 
-app.post('/admin/register-app', async (req,res)=> {
-    const { name, url, redirectUri } = req.body 
+// app.post('/admin/register-app', async (req,res)=> {
+//     const { name, url, redirectUri } = req.body 
 
-    if(!name || !redirectUri) {
-        return res
-        .status(400)
-        .json({ message: "App name and redirectUri are Required"})
+//     if(!name || !redirectUri) {
+//         return res
+//         .status(400)
+//         .json({ message: "App name and redirectUri are Required"})
+//     }
+
+//     const clientId = crypto.randomUUID()
+
+//     const clientSecret = crypto.randomBytes(32).toString("hex")
+
+//     await db.insert(applicationsTable).values({
+//         id:clientId,
+//         secret: clientSecret,
+//         name, 
+//         url,
+//         redirectUri
+//     })
+
+//     res.json({
+//         message:"Application Registered Successfully !",
+//         client_id: clientId,
+//         client_secret: clientSecret
+//     })
+// })
+
+app.post('/admin/register-app', async (req, res) => {
+    try {
+        const { name, url, redirect_uri } = req.body;
+
+        // 1. Validate inputs
+        if (!name || !redirect_uri) {
+            return res.status(400).json({ message: "Name and Redirect URI are required" });
+        }
+
+        // 2. Generate secure Client ID and Secret
+        const client_id = crypto.randomBytes(16).toString('hex');
+        const client_secret = crypto.randomBytes(32).toString('hex');
+
+        // 3. Save to database
+        await db.insert(applicationsTable).values({
+            id: client_id,
+            secret: client_secret,
+            name: name,
+            url: url || null,
+            redirectUri: redirect_uri // Ensure this matches your Drizzle schema exactly!
+        });
+
+        // 4. Return the keys to the frontend
+        return res.json({ 
+            message: "Application registered successfully",
+            client_id, 
+            client_secret 
+        });
+
+    } catch (error: any) {
+        // THIS IS THE MAGIC LINE: It prints the EXACT error to the Vercel logs and your browser
+        console.error("Register App Crash Details:", error);
+        return res.status(500).json({ 
+            message: "Failed to save application", 
+            error: error.message 
+        });
     }
-
-    const clientId = crypto.randomUUID()
-
-    const clientSecret = crypto.randomBytes(32).toString("hex")
-
-    await db.insert(applicationsTable).values({
-        id:clientId,
-        secret: clientSecret,
-        name, 
-        url,
-        redirectUri
-    })
-
-    res.json({
-        message:"Application Registered Successfully !",
-        client_id: clientId,
-        client_secret: clientSecret
-    })
-})
-
-
+});
 
 
 
