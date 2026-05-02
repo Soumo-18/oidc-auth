@@ -126,7 +126,7 @@ app.post('/admin/register-app', async (req, res) => {
             secret: client_secret,
             name: appName,
             url: appUrl || null,
-            redirectUri: appRedirect // Ensure this key matches your Drizzle schema!
+            redirectUri: appRedirect // Must be camelCase to match your schema.ts!
         });
 
         return res.json({ 
@@ -136,10 +136,13 @@ app.post('/admin/register-app', async (req, res) => {
         });
 
     } catch (error: any) {
+        // CHANGED: This will pull the exact Postgres database error out of hiding
         console.error("Register App Crash Details:", error);
         return res.status(500).json({ 
             message: "Failed to save application to database", 
-            error: error.message 
+            error: error.message,
+            cause: error.cause?.message || "Check your Vercel logs",
+            detail: error.detail || "No additional details"
         });
     }
 });
