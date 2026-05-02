@@ -299,40 +299,26 @@ app.post("/o/authenticate/sign-up", async (req, res) => {
   const { firstName, lastName, email, password } = req.body;
 
   if (!email || !password || !firstName) {
-    res
-      .status(400)
-      .json({ message: "First name, email, and password are required." });
-    return;
+    return res.status(400).json({ message: "First name, email, and password are required." });
   }
 
-  const [existing] = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(eq(usersTable.email, email))
-    .limit(1);
+  try {
+    const salt = crypto.randomBytes(16).toString("hex");
+    const hash = crypto.createHash("sha256").update(password + salt).digest("hex");
 
-  if (existing) {
-    res
-      .status(409)
-      .json({ message: "An account with this email already exists." });
-    return;
+    await db.insert(usersTable).values({
+      firstName,
+      lastName: lastName || null,
+      email,
+      password: hash,
+      salt,
+    });
+
+    return res.status(201).json({ ok: true });
+  } catch (err) {
+    console.error("Signup Error:", err);
+    return res.status(500).json({ message: "Database insertion failed." });
   }
-
-  const salt = crypto.randomBytes(16).toString("hex");
-  const hash = crypto
-    .createHash("sha256")
-    .update(password + salt)
-    .digest("hex");
-
-  await db.insert(usersTable).values({
-    firstName,
-    lastName: lastName ?? null,
-    email,
-    password: hash,
-    salt,
-  });
-
-  res.status(201).json({ ok: true });
 });
 
 app.get("/o/userinfo", async (req, res) => {
