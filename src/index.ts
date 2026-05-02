@@ -58,29 +58,77 @@ app.get("/health", (req, res) =>
 //     })
 // })
 
+// app.post('/admin/register-app', async (req, res) => {
+//     try {
+//         const { name, url, redirect_uri } = req.body;
+
+//         // 1. Validate inputs
+//         if (!name || !redirect_uri) {
+//             return res.status(400).json({ message: "Name and Redirect URI are required" });
+//         }
+
+//         // 2. Generate secure Client ID and Secret
+//         const client_id = crypto.randomBytes(16).toString('hex');
+//         const client_secret = crypto.randomBytes(32).toString('hex');
+
+//         // 3. Save to database
+//         await db.insert(applicationsTable).values({
+//             id: client_id,
+//             secret: client_secret,
+//             name: name,
+//             url: url || null,
+//             redirectUri: redirect_uri // Ensure this matches your Drizzle schema exactly!
+//         });
+
+//         // 4. Return the keys to the frontend
+//         return res.json({ 
+//             message: "Application registered successfully",
+//             client_id, 
+//             client_secret 
+//         });
+
+//     } catch (error: any) {
+//         // THIS IS THE MAGIC LINE: It prints the EXACT error to the Vercel logs and your browser
+//         console.error("Register App Crash Details:", error);
+//         return res.status(500).json({ 
+//             message: "Failed to save application", 
+//             error: error.message 
+//         });
+//     }
+// });
 app.post('/admin/register-app', async (req, res) => {
     try {
-        const { name, url, redirect_uri } = req.body;
+        // 1. Safety check in case the body is completely empty
+        const body = req.body || {};
+        console.log("Incoming request body:", body);
 
-        // 1. Validate inputs
-        if (!name || !redirect_uri) {
-            return res.status(400).json({ message: "Name and Redirect URI are required" });
+        // 2. Catch all common naming variations your frontend might be using
+        const appName = body.name || body.applicationName || body.appName;
+        const appUrl = body.url || body.homepageUrl || body.homepage;
+        const appRedirect = body.redirect_uri || body.redirectUri;
+
+        // 3. Strict validation
+        if (!appName || !appRedirect) {
+            return res.status(400).json({ 
+                message: "Missing fields.", 
+                expected: "name, redirect_uri",
+                received: body 
+            });
         }
 
-        // 2. Generate secure Client ID and Secret
+        // 4. Generate keys
         const client_id = crypto.randomBytes(16).toString('hex');
         const client_secret = crypto.randomBytes(32).toString('hex');
 
-        // 3. Save to database
+        // 5. Save to database
         await db.insert(applicationsTable).values({
             id: client_id,
             secret: client_secret,
-            name: name,
-            url: url || null,
-            redirectUri: redirect_uri // Ensure this matches your Drizzle schema exactly!
+            name: appName,
+            url: appUrl || null,
+            redirectUri: appRedirect // Ensure this key matches your Drizzle schema!
         });
 
-        // 4. Return the keys to the frontend
         return res.json({ 
             message: "Application registered successfully",
             client_id, 
@@ -88,15 +136,13 @@ app.post('/admin/register-app', async (req, res) => {
         });
 
     } catch (error: any) {
-        // THIS IS THE MAGIC LINE: It prints the EXACT error to the Vercel logs and your browser
         console.error("Register App Crash Details:", error);
         return res.status(500).json({ 
-            message: "Failed to save application", 
+            message: "Failed to save application to database", 
             error: error.message 
         });
     }
 });
-
 
 
 
