@@ -233,65 +233,136 @@ res.json({ token })
 })
 
 //token exchange endpoint
+// app.post('/o/token', async(req,res) => {
+//     const { grant_type, code, client_id, client_secret}= req.body
+
+//     //validation the applications credentials
+//     const [app] = await db.select().from(applicationsTable).where(eq(applicationsTable.id, client_id)).limit(1)
+
+//     if(!app || app.secret !== client_secret){
+//         return res.status(401).json({error:"Invalid_client"})
+//     }
+//     //validating the authorization code 
+//     const [authCode] = await db.select().from(authorizationCodesTable).where(eq(authorizationCodesTable.code, code)).limit(1)
+
+//     if(!authCode || authCode.clientId !== client_id) { 
+//         return res.status(400).json({
+//             error:"invalid_grant", message:"Invlaid Code"
+//         })
+//     }
+
+//     if(new Date() > authCode.expiresAt ) {
+//         return res.status(400).json({error:"invalid_grant", message:"Code Expired"})
+//     }
+
+//     //delete the code so it cannot be used again
+//     await db.delete(authorizationCodesTable).where(eq(authorizationCodesTable.id, authCode.id))
+
+//     //get the User and Issue Token
+//     const [user] = await db.select().from(usersTable).where(eq(usersTable.id, authCode.userId)).limit(1)
+
+//     // const ISSUER = `http://localhost:${PORT}`
+//     const ISSUER = process.env.NODE_ENV === "production" 
+//   ? "https://auth.soumodipto.me" 
+//   : `http://localhost:${PORT}`;
+//     const now = Math.floor( Date.now() / 1000 )
+
+//     const claims: JWTClaims = {
+//         iss:ISSUER,
+//         sub:user.id,
+//         email:user.email,
+//         email_verified:String(user.emailVerified),
+//         exp:now+3600,
+//         given_name:user.firstName ?? "",
+//         family_name: user.lastName ?? undefined,
+//         name: [user.firstName, user.lastName].filter(Boolean).join(' '),
+//         picture: user.profileImageURL ?? undefined
+
+//     }
+
+//     const id_token = JWT.sign(claims, PRIVATE_KEY, { algorithm: "RS256"})
+
+//     //in OIDC we return an access_token for (APIs) and an id_token(user profile data)
+//     res.json({
+//     access_token: id_token,
+//     id_token: id_token,
+//     token_type: "Bearer",
+//     expires_in: 3600,
+//     scope: "openid email profile"
+// });
+// })
+//token exchange endpoint
 app.post('/o/token', async(req,res) => {
-    const { grant_type, code, client_id, client_secret}= req.body
+    try {
+        const { grant_type, code, client_id, client_secret } = req.body;
 
-    //validation the applications credentials
-    const [app] = await db.select().from(applicationsTable).where(eq(applicationsTable.id, client_id)).limit(1)
+        // 1. Prevent Drizzle crashes from undefined values
+        if (!client_id || !code) {
+            return res.status(400).json({ error: "invalid_request", message: "Missing client_id or code" });
+        }
 
-    if(!app || app.secret !== client_secret){
-        return res.status(401).json({error:"Invalid_client"})
+        // 2. Validate the application credentials
+        const [app] = await db.select().from(applicationsTable).where(eq(applicationsTable.id, client_id)).limit(1);
+
+        if(!app || app.secret !== client_secret){
+            return res.status(401).json({ error: "invalid_client", message: "Secret mismatch" });
+        }
+        
+        // 3. Validate the authorization code 
+        const [authCode] = await db.select().from(authorizationCodesTable).where(eq(authorizationCodesTable.code, code)).limit(1);
+
+        if(!authCode || authCode.clientId !== client_id) { 
+            return res.status(400).json({ error: "invalid_grant", message: "Invalid Code" });
+        }
+
+        if(new Date() > authCode.expiresAt ) {
+            return res.status(400).json({ error: "invalid_grant", message: "Code Expired" });
+        }
+
+        // 4. Delete the code so it cannot be used again
+        await db.delete(authorizationCodesTable).where(eq(authorizationCodesTable.id, authCode.id));
+
+        // 5. Get the User and Issue Token
+        const [user] = await db.select().from(usersTable).where(eq(usersTable.id, authCode.userId)).limit(1);
+
+        if (!user) {
+            return res.status(404).json({ error: "invalid_grant", message: "User not found" });
+        }
+
+        const ISSUER = process.env.NODE_ENV === "production" 
+          ? "https://auth.soumodipto.me" 
+          : `http://localhost:${process.env.PORT ?? 8000}`;
+          
+        const now = Math.floor( Date.now() / 1000 );
+
+        const claims: JWTClaims = {
+            iss: ISSUER,
+            sub: user.id,
+            email: user.email,
+            email_verified: String(user.emailVerified),
+            exp: now + 3600,
+            given_name: user.firstName ?? "",
+            family_name: user.lastName ?? undefined,
+            name: [user.firstName, user.lastName].filter(Boolean).join(' '),
+            picture: user.profileImageURL ?? undefined
+        };
+
+        const id_token = JWT.sign(claims, PRIVATE_KEY, { algorithm: "RS256"});
+
+        return res.json({
+            access_token: id_token,
+            id_token: id_token,
+            token_type: "Bearer",
+            expires_in: 3600,
+            scope: "openid email profile"
+        });
+
+    } catch (err: any) {
+        // If it crashes, log it and return JSON, NOT HTML
+        console.error("Token Exchange Crash:", err);
+        return res.status(500).json({ error: "server_error", message: err.message });
     }
-    //validating the authorization code 
-    const [authCode] = await db.select().from(authorizationCodesTable).where(eq(authorizationCodesTable.code, code)).limit(1)
-
-    if(!authCode || authCode.clientId !== client_id) { 
-        return res.status(400).json({
-            error:"invalid_grant", message:"Invlaid Code"
-        })
-    }
-
-    if(new Date() > authCode.expiresAt ) {
-        return res.status(400).json({error:"invalid_grant", message:"Code Expired"})
-    }
-
-    //delete the code so it cannot be used again
-    await db.delete(authorizationCodesTable).where(eq(authorizationCodesTable.id, authCode.id))
-
-    //get the User and Issue Token
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.id, authCode.userId)).limit(1)
-
-    // const ISSUER = `http://localhost:${PORT}`
-    const ISSUER = process.env.NODE_ENV === "production" 
-  ? "https://auth.soumodipto.me" 
-  : `http://localhost:${PORT}`;
-    const now = Math.floor( Date.now() / 1000 )
-
-    const claims: JWTClaims = {
-        iss:ISSUER,
-        sub:user.id,
-        email:user.email,
-        email_verified:String(user.emailVerified),
-        exp:now+3600,
-        given_name:user.firstName ?? "",
-        family_name: user.lastName ?? undefined,
-        name: [user.firstName, user.lastName].filter(Boolean).join(' '),
-        picture: user.profileImageURL ?? undefined
-
-    }
-
-    const id_token = JWT.sign(claims, PRIVATE_KEY, { algorithm: "RS256"})
-
-    //in OIDC we return an access_token for (APIs) and an id_token(user profile data)
-    res.json({
-    access_token: id_token,
-    id_token: id_token,
-    token_type: "Bearer",
-    expires_in: 3600,
-    scope: "openid email profile"
 });
-})
-
 
 
 
