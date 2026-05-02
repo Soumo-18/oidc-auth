@@ -1,13 +1,15 @@
 import "dotenv/config";
-import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
 
-// Forcefully remove the "-pooler" tag from the connection string
-// This guarantees Drizzle will use a Direct Connection and stops the $1 param crash
+// 1. Forcefully remove the "-pooler" tag from the connection string
+// This GUARANTEES a direct connection and stops the INSERT crash
 const directDbUrl = process.env.DATABASE_URL!.replace("-pooler", "");
 
-export const db: NodePgDatabase = drizzle(directDbUrl);
+// 2. Create the connection pool with the clean URL
+const pool = new Pool({
+  connectionString: directDbUrl,
+});
 
-// import "dotenv/config";
-// import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres"
-
-// export const db: NodePgDatabase = drizzle(process.env.DATABASE_URL!)
+// 3. Export the db instance
+export const db = drizzle(pool);
