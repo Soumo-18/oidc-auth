@@ -338,9 +338,13 @@ if (params.toString()) {
         const data = await res.json().catch(() => ({}));
 
         if (!res.ok) {
-          showError(data.message || 'Something went wrong. Please try again.');
+            showError(data.message || 'Something went wrong. Please try again.');
         } else if (data.redirect) {
-          window.location.href = data.redirect;
+    
+            window.location.href = data.redirect;
+        } else {
+    
+            window.location.href = '/register-app.html';
         }
       } catch {
         showError('Something went wrong. Please try again.');
